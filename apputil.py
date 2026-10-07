@@ -1,22 +1,35 @@
 import plotly.express as px
 import pandas as pd
 
-TITANIC_URL = "https://raw.githubusercontent.com/leontoddjohnson/datasets/main/data/titanic.csv"
+TITANIC_URL = (
+    "https://raw.githubusercontent.com/leontoddjohnson/"
+    "datasets/main/data/titanic.csv"
+)
 AGE_LABELS = ["Child", "Teen", "Adult", "Senior"]
 
 
 def _snake(name):
-    """Rename text like 'Age Group' or 'Pclass' into lowercase-underscore form."""
+    """Rename text like 'Age Group' into lowercase_underscore form."""
     return str(name).strip().replace(" ", "_").lower()
 
 
 def load_titanic():
+    """Load the Titanic data and rename every column.
+
+    Names such as Pclass become pclass so later code can use
+    one lowercase_underscore style.
+    """
     df = pd.read_csv(TITANIC_URL)
     df.columns = [_snake(col) for col in df.columns]
     return df
 
 
 def _with_age_group(df):
+    """Add Child, Teen, Adult, and Senior labels from age.
+
+    Cuts are 0-12, 13-19, 20-59, and 60 or older. The frame is
+    copied so the caller's table stays unchanged.
+    """
     df = df.copy()
     df["age_group"] = pd.cut(
         df["age"],
@@ -29,18 +42,34 @@ def _with_age_group(df):
 
 
 def survival_demographics():
+    """Count passengers and survivors by class, sex, and age group.
+
+    observed=False keeps groups with no passengers. Their survival
+    rate stays blank, because a rate needs a real denominator.
+    """
     df = _with_age_group(load_titanic())
     demo = (
         df.groupby(["pclass", "sex", "age_group"], observed=False)
-        .agg(n_passengers=("survived", "size"), n_survivors=("survived", "sum"))
+        .agg(
+            n_passengers=("survived", "size"),
+            n_survivors=("survived", "sum"),
+        )
         .reset_index()
     )
     counts = demo["n_passengers"]
     demo["survival_rate"] = demo["n_survivors"] / counts.where(counts > 0)
-    return demo.sort_values(["pclass", "sex", "age_group"]).reset_index(drop=True)
+    return (
+        demo.sort_values(["pclass", "sex", "age_group"])
+        .reset_index(drop=True)
+    )
 
 
 def visualize_demographic():
+    """Plot survival rate by age group, sex, and passenger class.
+
+    One panel per class shows whether women survived at a higher
+    rate than men in every age group.
+    """
     demo = survival_demographics()
     fig = px.bar(
         demo,
@@ -66,6 +95,12 @@ def visualize_demographic():
 
 
 def family_groups():
+    """Summarize fares for each passenger class and family size.
+
+    Family size is siblings or spouses, plus parents or children,
+    plus the passenger. Each group gets a count and the average,
+    minimum, and maximum fare.
+    """
     df = load_titanic()
     df["family_size"] = df["sibsp"] + df["parch"] + 1
     groups = (
@@ -83,12 +118,22 @@ def family_groups():
 
 
 def last_names():
+    """Count passengers who share each last name.
+
+    Names are stored as 'Last, Title First', so the last name is
+    the text before the comma. Returns a Series of counts.
+    """
     df = load_titanic()
     names = df["name"].str.split(",").str[0].str.strip()
     return names.value_counts()
 
 
 def visualize_families():
+    """Plot average fare by family size and passenger class.
+
+    Hover shows the passenger count and the minimum and maximum
+    fare for each group.
+    """
     groups = family_groups()
     groups["pclass"] = groups["pclass"].astype(str)
     fig = px.bar(
@@ -110,6 +155,11 @@ def visualize_families():
 
 
 def visualize_family_size():
+    """Plot how many passengers fall into each family size.
+
+    Bars are split by class so party size can be compared across
+    first, second, and third class.
+    """
     groups = family_groups()
     groups["pclass"] = groups["pclass"].astype(str)
     fig = px.bar(
